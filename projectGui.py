@@ -60,10 +60,10 @@ class EasyMLWindow(QMainWindow):
         upload_node = self.createNode("업로드", QPointF(200, 250))
         upload_node.mouseDoubleClickEvent = lambda event: self.openDragDropWindow()
 
-def openDragDropWindow(self):
-    # 드래그앤드롭 창 생성
-    self.drag_drop_window = DragDropWindow()
-    self.drag_drop_window.exec_()
+    def openDragDropWindow(self):
+        # 드래그앤드롭 창 생성
+        self.drag_drop_window = DragDropWindow()
+        self.drag_drop_window.exec_()
 
 class DragDropWindow(QDialog):
     def __init__(self):
