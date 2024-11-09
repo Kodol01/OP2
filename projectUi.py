@@ -153,7 +153,7 @@ class uploadPage(QWidget):  # 엑셀 업로드 페이지
             
         event.acceptProposedAction()
 
-class fChoicePage(QWidget):  # 엑셀 업로드 페이지
+class fChoicePage(QWidget):  # 기능 선택 페이지 1
     def __init__(self, main_window):
         super().__init__()
         self.main_window = main_window
