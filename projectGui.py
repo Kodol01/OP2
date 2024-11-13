@@ -7,7 +7,7 @@ class EasyMLWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Easy MachineLearning")
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 2400, 1400)  # 창 크기를 설정
         self.initUI()
 
     def initUI(self):
@@ -40,14 +40,14 @@ class EasyMLWindow(QMainWindow):
 
     def createNode(self, text, position):
         # 노드 생성 함수
-        node = QGraphicsEllipseItem(0, 0, 60, 60)
+        node = QGraphicsEllipseItem(0, 0, 180, 180)
         node.setPos(position)
         self.scene.addItem(node)
         
         # 텍스트 라벨 추가
         label = QLabel(text)
         label.setAlignment(Qt.AlignCenter)
-        label.setFixedSize(60, 60)
+        label.setFixedSize(180, 180)
         proxy = QGraphicsProxyWidget()
         proxy.setWidget(label)
         proxy.setPos(position)
@@ -69,7 +69,7 @@ class DragDropWindow(QDialog):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("파일 업로드")
-        self.setGeometry(300, 300, 400, 250)
+        self.setGeometry(300, 300, 800, 500)
         self.setAcceptDrops(True)  # 드래그앤드롭 활성화
 
         # 파일명 표시 레이블
