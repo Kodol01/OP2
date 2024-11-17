@@ -1,127 +1,181 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QLabel, QGraphicsView, QGraphicsScene, QGraphicsEllipseItem, QFileDialog, QGraphicsLineItem, QVBoxLayout, QWidget, QGraphicsProxyWidget, QDialog
-from PyQt5.QtCore import Qt, QPointF
-from PyQt5.QtGui import QPen
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QLabel, QGraphicsView, QGraphicsScene,
+    QGraphicsRectItem, QGraphicsProxyWidget, QVBoxLayout, QHBoxLayout,
+    QWidget, QPushButton, QGraphicsItem, QGraphicsTextItem
+)
+from PyQt5.QtCore import Qt, QPointF, QRectF
+from PyQt5.QtGui import QColor, QPen
+
 
 class EasyMLWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Easy MachineLearning")
-        self.setGeometry(100, 100, 2400, 1400)  # 창 크기를 설정
+        self.setGeometry(100, 100, 2000, 1200)
         self.initUI()
 
     def initUI(self):
-        # 메인 화면 위젯 설정
-        main_widget = QWidget()
-        self.setCentralWidget(main_widget)
-        layout = QVBoxLayout(main_widget)
+        # 초기 화면 설정
+        self.main_widget = QWidget(self)
+        self.setCentralWidget(self.main_widget)
+        main_layout = QVBoxLayout(self.main_widget)
 
-        # 타이틀 레이블
-        title = QLabel("Easy MachineLearning")
+        # 타이틀 및 시작 버튼
+        title = QLabel("Easy MachineLearning", self)
         title.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title)
+        main_layout.addWidget(title)
 
-        # 시작하기 버튼
-        start_btn = QPushButton("시작하기")
-        start_btn.clicked.connect(self.showNodesPage)
-        layout.addWidget(start_btn)
+        start_btn = QPushButton("시작하기", self)
+        start_btn.clicked.connect(self.showWorkspace)
+        main_layout.addWidget(start_btn)
 
-    def showNodesPage(self):
-        self.centralWidget().deleteLater()  # 초기 위젯 제거
-        self.scene = QGraphicsScene()
-        self.view = QGraphicsView(self.scene, self)
+    def showWorkspace(self):
+        # 워크스페이스 화면 설정
+        self.main_widget.deleteLater()
+        self.scene = QGraphicsScene(self)
+        self.scene.setSceneRect(50, 50, 1900, 1100)
+
+        # 작업 공간 설정 (하나의 QGraphicsView로 좌우 분리된 화면 구성)
+        self.view = UnifiedGraphicsView(self.scene, self)
         self.setCentralWidget(self.view)
 
-        # Start 노드 생성
-        self.start_node = self.createNode("Start", QPointF(100, 250))
+        # 왼쪽 1/4 부분을 사각형 선으로 분리하여 노드 선택 패널과 작업 공간을 구분
+        self.left_boundary = QGraphicsRectItem(50, 50, 400, 1100)
+        self.left_boundary.setPen(QPen(Qt.black, 2))  # 사각형 선 표시
+        self.scene.addItem(self.left_boundary)
 
-        # 시작 노드 클릭 시 업로드 노드 생성
-        self.start_node.mousePressEvent = lambda event: self.createUploadNode()
+        # 노드 선택 패널에 노드 추가 (아이콘 및 이름 형태로 구성)
+        self.addNodeToPanel("Node 1", QPointF(60, 70))
+        self.addNodeToPanel("Node 2", QPointF(160, 70))
+        self.addNodeToPanel("Node 3", QPointF(260, 70))
+        self.addNodeToPanel("Node 4", QPointF(360, 70))
+        self.addNodeToPanel("Node 5", QPointF(60, 190))
+        self.addNodeToPanel("Node 6", QPointF(160, 190))
+        self.addNodeToPanel("Node 7", QPointF(260, 190))
+        self.addNodeToPanel("Node 8", QPointF(360, 190))
+        self.addNodeToPanel("Node 9", QPointF(60, 310))
+        self.addNodeToPanel("Node 10", QPointF(160, 310))
+        self.addNodeToPanel("Node 11", QPointF(260, 310))
+        self.addNodeToPanel("Node 12", QPointF(360, 310))
+        self.addNodeToPanel("Node 13", QPointF(60, 430))
+        self.addNodeToPanel("Node 14", QPointF(160, 430))
+        self.addNodeToPanel("Node 15", QPointF(260, 430))
+        self.addNodeToPanel("Node 16", QPointF(360, 430))
+        self.addNodeToPanel("Node 17", QPointF(60, 550))
+        self.addNodeToPanel("Node 18", QPointF(160, 550))
+        self.addNodeToPanel("Node 19", QPointF(260, 550))
+        self.addNodeToPanel("Node 20", QPointF(360, 550))
 
-    def createNode(self, text, position):
-        # 노드 생성 함수
-        node = QGraphicsEllipseItem(0, 0, 180, 180)
+        # 작업 공간에 Start 노드 생성
+        self.createStartNode()
+
+        # 오른쪽 작업 공간 테두리 추가
+        self.right_boundary = QGraphicsRectItem(450, 50, 1500, 1100)
+        self.right_boundary.setPen(QPen(Qt.black, 2))  # 사각형 선 표시
+        self.scene.addItem(self.right_boundary)
+
+        # 노드 설명 영역 추가
+        self.description_box = QGraphicsRectItem(50, 650, 400, 500)
+        self.description_box.setPen(QPen(Qt.black, 2))
+        self.scene.addItem(self.description_box)
+        description_label = QGraphicsTextItem("Node Description", self.description_box)
+        description_label.setPos(150, 900)
+
+    def addNodeToPanel(self, text, position):
+        # 패널에 노드 추가
+        node = DraggableNode(0, 0, 80, 80, text)
         node.setPos(position)
         self.scene.addItem(node)
-        
-        # 텍스트 라벨 추가
-        label = QLabel(text)
-        label.setAlignment(Qt.AlignCenter)
-        label.setFixedSize(180, 180)
-        proxy = QGraphicsProxyWidget()
-        proxy.setWidget(label)
-        proxy.setPos(position)
-        self.scene.addItem(proxy)
-        
-        return node
 
-    def createUploadNode(self):
-        # 업로드 노드 생성
-        upload_node = self.createNode("업로드", QPointF(200, 250))
-        upload_node.mouseDoubleClickEvent = lambda event: self.openDragDropWindow()
+    def createStartNode(self):
+        # 작업 공간에 Start 노드 생성
+        node = DraggableNode(0, 0, 80, 80, "Start")
+        node.setBrush(QColor("lightgreen"))
+        center_x = 1200 - 30  # 오른쪽 3/4 부분 중앙에 위치
+        center_y = (self.scene.height() / 2) - 30
+        node.setPos(center_x, center_y)
+        self.scene.addItem(node)
 
-    def openDragDropWindow(self):
-        # 드래그앤드롭 창 생성
-        self.drag_drop_window = DragDropWindow()
-        self.drag_drop_window.exec_()
 
-class DragDropWindow(QDialog):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("파일 업로드")
-        self.setGeometry(300, 300, 800, 500)
-        self.setAcceptDrops(True)  # 드래그앤드롭 활성화
+class DraggableNode(QGraphicsRectItem):
+    def __init__(self, x, y, width, height, label_text):
+        super().__init__(x, y, width, height)
+        self.setBrush(QColor("lightblue"))
+        self.setFlag(QGraphicsItem.ItemIsMovable, True)  # 드래그 가능
+        self.setFlag(QGraphicsItem.ItemIsSelectable, True)  # 선택 가능
+        self.label_text = label_text
 
-        # 파일명 표시 레이블
-        self.label = QLabel("파일을 여기에 드롭하세요.", self)
-        self.label.setAlignment(Qt.AlignCenter)
-        self.label.setGeometry(50, 50, 300, 100)
+        # 텍스트 추가
+        self.text_item = QGraphicsTextItem(label_text, self)
+        self.text_item.setPos(width / 2 - self.text_item.boundingRect().width() / 2, height / 2 - self.text_item.boundingRect().height() / 2)
 
-        # 제출 버튼 생성 및 비활성화
-        self.submit_btn = QPushButton("제출", self)
-        self.submit_btn.setGeometry(150, 180, 100, 40)
-        self.submit_btn.setEnabled(False)
-        self.submit_btn.clicked.connect(self.submitFile)
+        self.setAcceptDrops(True)  # 드래그 허용
+        self._drag_offset = QPointF(0, 0)  # 마우스와 노드 간의 상대적 오프셋 저장
 
-        # 파일 경로 저장 변수
-        self.file_path = ""
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            # 드래그 시작
+            self.setCursor(Qt.ClosedHandCursor)  # 드래그 중 커서 변경
+            # 마우스 클릭 지점과 노드의 상대 위치 계산
+            self._drag_offset = event.pos()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() == Qt.LeftButton:
+            # 마우스 위치를 기준으로 노드 위치 업데이트
+            new_pos = self.mapToParent(event.pos() - self._drag_offset)
+            # GUI 경계 내로만 이동하도록 제한
+            scene_rect = self.scene().sceneRect()
+            node_rect = self.rect()
+
+            # X축 경계 확인
+            if new_pos.x() < scene_rect.left():
+                new_pos.setX(scene_rect.left())
+            elif new_pos.x() + node_rect.width() > scene_rect.right():
+                new_pos.setX(scene_rect.right() - node_rect.width())
+
+            # Y축 경계 확인
+            if new_pos.y() < scene_rect.top():
+                new_pos.setY(scene_rect.top())
+            elif new_pos.y() + node_rect.height() > scene_rect.bottom():
+                new_pos.setY(scene_rect.bottom() - node_rect.height())
+
+            self.setPos(new_pos)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            # 드래그 종료 시 커서를 원래대로 복구
+            self.setCursor(Qt.ArrowCursor)
+        super().mouseReleaseEvent(event)
+
+
+class UnifiedGraphicsView(QGraphicsView):
+    def __init__(self, scene, parent=None):
+        super().__init__(scene, parent)
+        self.setAcceptDrops(True)
 
     def dragEnterEvent(self, event):
-        # 드래그된 파일이 있을 때만 허용
-        if event.mimeData().hasUrls():
+        if event.mimeData().hasText():
             event.acceptProposedAction()
 
     def dropEvent(self, event):
-        # 드롭된 파일의 경로를 저장하고 레이블에 표시
-        urls = event.mimeData().urls()
-        if urls:
-            self.file_path = urls[0].toLocalFile()
-            self.label.setText(f"업로드된 파일: {self.file_path}")
-            self.submit_btn.setEnabled(True)  # 제출 버튼 활성화
+        # 드롭된 위치에 노드 생성
+        text = event.mimeData().text()
+        position = self.mapToScene(event.pos())
+        node = DraggableNode(0, 0, 80, 80, text)
+        node.setBrush(QColor("lightblue"))
+        node.setFlag(QGraphicsItem.ItemIsMovable, True)  # 드롭된 노드는 이동 가능
+        node.setPos(position)
 
-    def submitFile(self):
-        # 제출 버튼 클릭 시 파일명 출력 또는 처리
-        print(f"제출된 파일: {self.file_path}")
-        self.close()  # 창 닫기
+        # 작업 공간 내에 있는지 확인
+        if not self.sceneRect().contains(node.sceneBoundingRect()):
+            return  # 작업 공간 밖이면 추가하지 않음
 
-    def displayFileName(self, file_name):
-        # 업로드 노드에 파일명 표시
-        upload_label = QLabel(f"업로드: {file_name}")
-        upload_label.setAlignment(Qt.AlignCenter)
-        upload_label.setFixedSize(200, 30)
-        upload_label.move(200, 310)
-        self.scene.addWidget(upload_label)
-        
-        # 새 노드 생성 및 연결
-        next_node = self.createNode("노드", QPointF(300, 250))
-        self.drawArrow(self.scene.items()[-2], next_node)  # 이전 노드와 연결
+        self.scene().addItem(node)
+        event.acceptProposedAction()
 
-    def drawArrow(self, start_item, end_item):
-        # 두 노드 사이에 화살표 그리기
-        line = QGraphicsLineItem(start_item.pos().x() + 30, start_item.pos().y() + 30,
-                                 end_item.pos().x() + 30, end_item.pos().y() + 30)
-        line.setPen(QPen(Qt.black, 2, Qt.SolidLine))
-        self.scene.addItem(line)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
