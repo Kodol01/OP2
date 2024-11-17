@@ -2,10 +2,11 @@ import sys
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QLabel, QGraphicsView, QGraphicsScene,
     QGraphicsRectItem, QGraphicsProxyWidget, QVBoxLayout, QHBoxLayout,
-    QWidget, QPushButton, QGraphicsItem, QGraphicsTextItem
+    QWidget, QPushButton, QGraphicsItem, QGraphicsTextItem, QGraphicsLineItem, QGraphicsPolygonItem
 )
-from PyQt5.QtCore import Qt, QPointF, QRectF
-from PyQt5.QtGui import QColor, QPen
+from PyQt5.QtCore import Qt, QPointF, QRectF, QTimer
+from PyQt5.QtGui import QColor, QPen, QPainterPath, QBrush, QPolygonF
+import math
 
 
 class EasyMLWindow(QMainWindow):
@@ -14,6 +15,8 @@ class EasyMLWindow(QMainWindow):
         self.setWindowTitle("Easy MachineLearning")
         self.setGeometry(100, 100, 2000, 1200)
         self.initUI()
+        self.previous_node = None
+        self.lines = []
 
     def initUI(self):
         # 초기 화면 설정
@@ -23,10 +26,12 @@ class EasyMLWindow(QMainWindow):
 
         # 타이틀 및 시작 버튼
         title = QLabel("Easy MachineLearning", self)
+        title.setStyleSheet("font-size: 100px;")
         title.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title)
 
         start_btn = QPushButton("시작하기", self)
+        start_btn.setStyleSheet("font-size: 40px;")
         start_btn.clicked.connect(self.showWorkspace)
         main_layout.addWidget(start_btn)
 
@@ -46,7 +51,7 @@ class EasyMLWindow(QMainWindow):
         self.scene.addItem(self.left_boundary)
 
         # 노드 선택 패널에 노드 추가 (아이콘 및 이름 형태로 구성)
-        self.addNodeToPanel("Node 1", QPointF(60, 70))
+        self.addNodeToPanel("업로드", QPointF(60, 70))
         self.addNodeToPanel("Node 2", QPointF(160, 70))
         self.addNodeToPanel("Node 3", QPointF(260, 70))
         self.addNodeToPanel("Node 4", QPointF(360, 70))
@@ -82,6 +87,11 @@ class EasyMLWindow(QMainWindow):
         description_label = QGraphicsTextItem("Node Description", self.description_box)
         description_label.setPos(150, 900)
 
+        # 타이머 설정: 노드 위치 변경 시 라인 업데이트
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.updateLines)
+        self.timer.start(100)
+
     def addNodeToPanel(self, text, position):
         # 패널에 노드 추가
         node = DraggableNode(0, 0, 80, 80, text)
@@ -96,9 +106,71 @@ class EasyMLWindow(QMainWindow):
         center_y = (self.scene.height() / 2) - 30
         node.setPos(center_x, center_y)
         self.scene.addItem(node)
+        self.previous_node = node
 
+    # 노드 간의 화살표 연결 추가
+    def connectNode(self, node):
+        if self.previous_node is not None:
+            line = QGraphicsLineItem(
+                self.previous_node.sceneBoundingRect().center().x(),
+                self.previous_node.sceneBoundingRect().center().y(),
+                node.sceneBoundingRect().center().x(),
+                node.sceneBoundingRect().center().y()
+            )
+            pen = QPen(Qt.black, 3, Qt.SolidLine)
+            pen.setCapStyle(Qt.RoundCap)
+            line.setPen(pen)
+            line.setZValue(-1)  # 화살표가 노드 뒤로 가지 않도록 설정
+            self.scene.addItem(line)
+            self.lines.append((line, self.previous_node, node))
+
+            
+        self.previous_node = node
+
+    def updateLines(self):
+        for line, start_node, end_node in self.lines:
+            if isinstance(line, QGraphicsLineItem):
+                line.setLine(
+                    start_node.sceneBoundingRect().center().x(),
+                    start_node.sceneBoundingRect().center().y(),
+                    end_node.sceneBoundingRect().center().x(),
+                    end_node.sceneBoundingRect().center().y()
+                )
+            
 
 class DraggableNode(QGraphicsRectItem):
+    def mouseDoubleClickEvent(self, event):
+        if self.label_text == "업로드":
+            self.showUploadWindow()
+        super().mouseDoubleClickEvent(event)
+
+    def showUploadWindow(self):
+        # 파일 업로드 창 생성
+        self.upload_window = QWidget()
+        self.upload_window.setWindowTitle("파일 업로드")
+        self.upload_window.setGeometry(200, 200, 1000, 600)
+        self.upload_window.setAcceptDrops(True)
+        self.upload_window.dragEnterEvent = self.dragEnterEvent
+        self.upload_window.dropEvent = self.dropEvent
+
+        layout = QVBoxLayout()
+        label = QLabel("드래그앤드롭으로 파일을 업로드하세요", self.upload_window)
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+
+        self.upload_window.setLayout(layout)
+        self.upload_window.show()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        if urls:
+            file_path = urls[0].toLocalFile()
+            print(f"업로드된 파일: {file_path}")
+            # 파일 처리 로직 추가 가능
     def __init__(self, x, y, width, height, label_text):
         super().__init__(x, y, width, height)
         self.setBrush(QColor("lightblue"))
@@ -148,6 +220,9 @@ class DraggableNode(QGraphicsRectItem):
         if event.button() == Qt.LeftButton:
             # 드래그 종료 시 커서를 원래대로 복구
             self.setCursor(Qt.ArrowCursor)
+            parent_window = self.scene().views()[0].parent()
+            if isinstance(parent_window, EasyMLWindow):
+                parent_window.connectNode(self)
         super().mouseReleaseEvent(event)
 
 
@@ -175,6 +250,9 @@ class UnifiedGraphicsView(QGraphicsView):
 
         self.scene().addItem(node)
         event.acceptProposedAction()
+        parent_window = self.parent()
+        if isinstance(parent_window, EasyMLWindow):
+            parent_window.connectNode(node)
 
 
 if __name__ == "__main__":
