@@ -50,27 +50,17 @@ class EasyMLWindow(QMainWindow):
         self.left_boundary.setPen(QPen(Qt.black, 2))  # 사각형 선 표시
         self.scene.addItem(self.left_boundary)
 
+        self.fposition = [
+            ["업로드", 60, 70], ["Node 2", 160, 70], ["Node 3", 260, 70], ["Node 4", 360, 70],
+            ["Node 5", 60, 190], ["Node 6", 160, 190], ["Node 7", 260, 190], ["Node 8", 360, 190],
+            ["Node 9", 60, 310], ["Node 10", 160, 310], ["Node 11", 260, 310], ["Node 12", 360, 310],
+            ["Node 13", 60, 430], ["Node 14", 160, 430], ["Node 15", 260, 430], ["Node 16", 360, 430],
+            ["Node 17", 60, 550], ["Node 18", 160, 550], ["Node 19", 260, 550], ["Node 20", 360, 550]
+        ]
+
         # 노드 선택 패널에 노드 추가 (아이콘 및 이름 형태로 구성)
-        self.addNodeToPanel("업로드", QPointF(60, 70))
-        self.addNodeToPanel("Node 2", QPointF(160, 70))
-        self.addNodeToPanel("Node 3", QPointF(260, 70))
-        self.addNodeToPanel("Node 4", QPointF(360, 70))
-        self.addNodeToPanel("Node 5", QPointF(60, 190))
-        self.addNodeToPanel("Node 6", QPointF(160, 190))
-        self.addNodeToPanel("Node 7", QPointF(260, 190))
-        self.addNodeToPanel("Node 8", QPointF(360, 190))
-        self.addNodeToPanel("Node 9", QPointF(60, 310))
-        self.addNodeToPanel("Node 10", QPointF(160, 310))
-        self.addNodeToPanel("Node 11", QPointF(260, 310))
-        self.addNodeToPanel("Node 12", QPointF(360, 310))
-        self.addNodeToPanel("Node 13", QPointF(60, 430))
-        self.addNodeToPanel("Node 14", QPointF(160, 430))
-        self.addNodeToPanel("Node 15", QPointF(260, 430))
-        self.addNodeToPanel("Node 16", QPointF(360, 430))
-        self.addNodeToPanel("Node 17", QPointF(60, 550))
-        self.addNodeToPanel("Node 18", QPointF(160, 550))
-        self.addNodeToPanel("Node 19", QPointF(260, 550))
-        self.addNodeToPanel("Node 20", QPointF(360, 550))
+        for node_info in self.fposition:
+            self.addNodeToPanel(node_info[0], QPointF(node_info[1], node_info[2]))
 
         # 작업 공간에 Start 노드 생성
         self.createStartNode()
@@ -191,6 +181,7 @@ class DraggableNode(QGraphicsRectItem):
             self.setCursor(Qt.ClosedHandCursor)  # 드래그 중 커서 변경
             # 마우스 클릭 지점과 노드의 상대 위치 계산
             self._drag_offset = event.pos()
+            self.first_position = event.pos()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -218,11 +209,15 @@ class DraggableNode(QGraphicsRectItem):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
+            
             # 드래그 종료 시 커서를 원래대로 복구
             self.setCursor(Qt.ArrowCursor)
             parent_window = self.scene().views()[0].parent()
             if isinstance(parent_window, EasyMLWindow):
                 parent_window.connectNode(self)
+                for i in range(0, 20):
+                    if(parent_window.fposition[i][0] == self.label_text):
+                        parent_window.addNodeToPanel(parent_window.fposition[i][0], QPointF(parent_window.fposition[i][1], parent_window.fposition[i][2]))
         super().mouseReleaseEvent(event)
 
 
