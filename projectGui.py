@@ -96,12 +96,6 @@ class EasyMLWindow(QMainWindow):
         node.setPos(center_x, center_y)
         self.scene.addItem(node)
         self.previous_node = node
-
-        # Start 노드 위에 점 추가
-        start_dot = QGraphicsEllipseItem(center_x + 35, center_y - 50, 20, 20)
-        start_dot.setBrush(QBrush(QColor("orange")))
-        start_dot.setZValue(5)  # 점이 다른 요소 위에 보이도록 설정
-        self.scene.addItem(start_dot)
         
         # 작업 공간에 Start 노드 생성
         node = DraggableNode(0, 0, 80, 80, "Start")
@@ -157,16 +151,14 @@ class DraggableNode(QGraphicsRectItem):
         self._drag_offset = QPointF(0, 0)  # 마우스와 노드 간의 상대적 오프셋 저장
 
         # 왼쪽 빨간 점 추가
-        left_dot = QGraphicsEllipseItem(-15, height / 2 - 15, 30, 30, self)
-        left_dot.setBrush(QBrush(QColor("red")))
-        left_dot.setZValue(5)  # 노드 위에 보이도록 설정
-        self.scene.addItem(left_dot)
+        self.left_dot = QGraphicsEllipseItem(-5, height / 2, 10, 10, self)
+        self.left_dot.setBrush(QBrush(QColor("red")))
+        self.left_dot.setZValue(5)  # 노드 위에 보이도록 설정
 
         # 오른쪽 파란 점 추가
-        self.right_dot = QGraphicsEllipseItem(width - 15, height / 2 - 15, 30, 30, self)
+        self.right_dot = QGraphicsEllipseItem(width-5, height / 2, 10, 10, self)
         self.right_dot.setBrush(QBrush(QColor("blue")))
         self.right_dot.setZValue(5)  # 노드 위에 보이도록 설정
-        self.scene.addItem(self.right_dot)
 
     def mouseDoubleClickEvent(self, event):
         if self.label_text == "업로드":
@@ -200,6 +192,7 @@ class DraggableNode(QGraphicsRectItem):
             file_path = urls[0].toLocalFile()
             print(f"업로드된 파일: {file_path}")
             # 파일 처리 로직 추가 가능
+
 
 
     def mousePressEvent(self, event):
