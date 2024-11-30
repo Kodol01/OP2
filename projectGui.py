@@ -1,12 +1,11 @@
 import sys
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QLabel, QGraphicsView, QGraphicsScene,
-    QGraphicsRectItem, QGraphicsProxyWidget, QVBoxLayout, QHBoxLayout,
+    QGraphicsRectItem, QGraphicsProxyWidget, QVBoxLayout, QHBoxLayout, QGraphicsEllipseItem,
     QWidget, QPushButton, QGraphicsItem, QGraphicsTextItem, QGraphicsLineItem, QGraphicsPolygonItem
 )
-from PyQt5.QtCore import Qt, QPointF, QRectF, QTimer
-from PyQt5.QtGui import QColor, QPen, QPainterPath, QBrush, QPolygonF
-import math
+from PyQt5.QtCore import Qt, QPointF, QRectF, QTimer, QPoint
+from PyQt5.QtGui import QColor, QPen, QPainterPath, QPainter, QPolygonF, QBrush
 
 
 class EasyMLWindow(QMainWindow):
@@ -91,6 +90,21 @@ class EasyMLWindow(QMainWindow):
     def createStartNode(self):
         # 작업 공간에 Start 노드 생성
         node = DraggableNode(0, 0, 80, 80, "Start")
+        node.setBrush(QBrush(QColor("lightgreen")))
+        center_x = 1200 - 30  # 오른쪽 3/4 부분 중앙에 위치
+        center_y = (self.scene.height() / 2) - 30
+        node.setPos(center_x, center_y)
+        self.scene.addItem(node)
+        self.previous_node = node
+
+        # Start 노드 위에 점 추가
+        start_dot = QGraphicsEllipseItem(center_x + 35, center_y - 50, 20, 20)
+        start_dot.setBrush(QBrush(QColor("orange")))
+        start_dot.setZValue(5)  # 점이 다른 요소 위에 보이도록 설정
+        self.scene.addItem(start_dot)
+        
+        # 작업 공간에 Start 노드 생성
+        node = DraggableNode(0, 0, 80, 80, "Start")
         node.setBrush(QColor("lightgreen"))
         center_x = 1200 - 30  # 오른쪽 3/4 부분 중앙에 위치
         center_y = (self.scene.height() / 2) - 30
@@ -114,7 +128,6 @@ class EasyMLWindow(QMainWindow):
             self.scene.addItem(line)
             self.lines.append((line, self.previous_node, node))
 
-            
         self.previous_node = node
 
     def updateLines(self):
@@ -126,9 +139,35 @@ class EasyMLWindow(QMainWindow):
                     end_node.sceneBoundingRect().center().x(),
                     end_node.sceneBoundingRect().center().y()
                 )
-            
+
 
 class DraggableNode(QGraphicsRectItem):
+    def __init__(self, x, y, width, height, label_text):
+        super().__init__(x, y, width, height)
+        self.setBrush(QBrush(QColor("lightblue")))
+        self.setFlag(QGraphicsItem.ItemIsMovable, True)  # 드래그 가능
+        self.setFlag(QGraphicsItem.ItemIsSelectable, True)  # 선택 가능
+        self.label_text = label_text
+
+        # 텍스트 추가
+        self.text_item = QGraphicsTextItem(label_text, self)
+        self.text_item.setPos(width / 2 - self.text_item.boundingRect().width() / 2, height / 2 - self.text_item.boundingRect().height() / 2)
+
+        self.setAcceptDrops(True)  # 드래그 허용
+        self._drag_offset = QPointF(0, 0)  # 마우스와 노드 간의 상대적 오프셋 저장
+
+        # 왼쪽 빨간 점 추가
+        left_dot = QGraphicsEllipseItem(-15, height / 2 - 15, 30, 30, self)
+        left_dot.setBrush(QBrush(QColor("red")))
+        left_dot.setZValue(5)  # 노드 위에 보이도록 설정
+        self.scene.addItem(left_dot)
+
+        # 오른쪽 파란 점 추가
+        self.right_dot = QGraphicsEllipseItem(width - 15, height / 2 - 15, 30, 30, self)
+        self.right_dot.setBrush(QBrush(QColor("blue")))
+        self.right_dot.setZValue(5)  # 노드 위에 보이도록 설정
+        self.scene.addItem(self.right_dot)
+
     def mouseDoubleClickEvent(self, event):
         if self.label_text == "업로드":
             self.showUploadWindow()
@@ -161,19 +200,7 @@ class DraggableNode(QGraphicsRectItem):
             file_path = urls[0].toLocalFile()
             print(f"업로드된 파일: {file_path}")
             # 파일 처리 로직 추가 가능
-    def __init__(self, x, y, width, height, label_text):
-        super().__init__(x, y, width, height)
-        self.setBrush(QColor("lightblue"))
-        self.setFlag(QGraphicsItem.ItemIsMovable, True)  # 드래그 가능
-        self.setFlag(QGraphicsItem.ItemIsSelectable, True)  # 선택 가능
-        self.label_text = label_text
 
-        # 텍스트 추가
-        self.text_item = QGraphicsTextItem(label_text, self)
-        self.text_item.setPos(width / 2 - self.text_item.boundingRect().width() / 2, height / 2 - self.text_item.boundingRect().height() / 2)
-
-        self.setAcceptDrops(True)  # 드래그 허용
-        self._drag_offset = QPointF(0, 0)  # 마우스와 노드 간의 상대적 오프셋 저장
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -181,7 +208,6 @@ class DraggableNode(QGraphicsRectItem):
             self.setCursor(Qt.ClosedHandCursor)  # 드래그 중 커서 변경
             # 마우스 클릭 지점과 노드의 상대 위치 계산
             self._drag_offset = event.pos()
-            self.first_position = event.pos()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -209,15 +235,11 @@ class DraggableNode(QGraphicsRectItem):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
-            
             # 드래그 종료 시 커서를 원래대로 복구
             self.setCursor(Qt.ArrowCursor)
             parent_window = self.scene().views()[0].parent()
             if isinstance(parent_window, EasyMLWindow):
                 parent_window.connectNode(self)
-                for i in range(0, 20):
-                    if(parent_window.fposition[i][0] == self.label_text):
-                        parent_window.addNodeToPanel(parent_window.fposition[i][0], QPointF(parent_window.fposition[i][1], parent_window.fposition[i][2]))
         super().mouseReleaseEvent(event)
 
 
