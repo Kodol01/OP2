@@ -1,96 +1,80 @@
-import sys
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QLabel, QGraphicsView, QGraphicsScene,
-    QGraphicsRectItem, QVBoxLayout, QWidget, QPushButton, QGraphicsItem, QGraphicsTextItem, QGraphicsEllipseItem, QGraphicsLineItem
+    QWidget, QTabWidget, QVBoxLayout, QLabel, QProxyStyle, QStyleFactory,
+    QGraphicsRectItem, QVBoxLayout, QWidget, QGraphicsItem, QGraphicsTextItem, QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsScene, QGraphicsView
 )
-from PyQt5.QtCore import Qt, QPointF, QRectF, QPoint, QLineF
-from PyQt5.QtGui import QColor, QPen, QBrush, QMouseEvent
+from PyQt5.QtGui import QIcon, QColor, QPen, QBrush
+from PyQt5.QtCore import QSize, QPointF, Qt, QLineF
 
 
-class EasyMLWindow(QMainWindow):
+class CustomTabStyle(QProxyStyle):
+    def __init__(self):
+        super().__init__(QStyleFactory.create("Fusion"))
+
+class NodeTap(QTabWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Easy MachineLearning")
-        self.setGeometry(100, 100, 2000, 1200)
-        self.initUI()
-        self.previous_node = None
-        self.lines = []
+        self.setTabBarAutoHide(False)
+        self.setMovable(False)
 
-    def initUI(self):
-        # 초기 화면 설정
-        self.main_widget = QWidget(self)
-        self.setCentralWidget(self.main_widget)
-        main_layout = QVBoxLayout(self.main_widget)
+        # 아이콘 크기 설정
+        self.setIconSize(QSize(32, 32))
 
-        # 타이틀 및 시작 버튼
-        title = QLabel("Easy MachineLearning", self)
-        title.setStyleSheet("font-size: 100px;")
-        title.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(title)
+        # 커스텀 스타일 적용
+        self.setStyleSheet("""
+            QTabWidget::pane {
+                margin: 0px;  /* 콘텐츠 영역 외부 여백 제거 */
+                padding: 0px; /* 콘텐츠 영역 내부 여백 제거 */
+            }
+            QTabBar::tab {
+                width: 96;
+                background: #ffffff;
+                margin: 4px;  /* 탭 간의 간격을 추가 */
+                color: #000000;
+                border: none;  /* 기본 테두리는 제거 */
+            }
+            QTabBar::tab:selected {
+                width: 96;
+                background: #ffffff;
+                border: 4px solid black;  /* 검정색 테두리 추가 */
+                margin: 4px;  /* 선택된 탭이 약간 더 안쪽으로 들어오도록 설정 */
+                color: #000000;
+            }
+        """)
 
-        start_btn = QPushButton("시작하기", self)
-        start_btn.setStyleSheet("font-size: 40px;")
-        start_btn.clicked.connect(self.showWorkspace)
-        main_layout.addWidget(start_btn)
+        # 탭 추가
+        self.addTab(FileNodeTap(), QIcon("resource/file_node_tap_icon.png"), "File")
+        self.addTab(VisualizationNodeTap(), QIcon("resource/visualization_node_tap_icon.png"), "Visualization")
+        self.addTab(TransfromNodeTap(), QIcon("resource/transform_node_tap_icon.png"), "Transform")
+        self.addTab(ModelNodeTap(), QIcon("resource/model_node_tap_icon.png"), "Model")
+        self.addTab(EvaluateNodeTap(), QIcon("resource/evaluate_node_tap_icon.png"), "Evaluate")
 
-    def showWorkspace(self):
-        # 워크스페이스 화면 설정
-        self.main_widget.deleteLater()
-        self.scene = QGraphicsScene(self)
-        self.scene.setSceneRect(50, 50, 1900, 1100)
 
-        # 작업 공간 설정 (하나의 QGraphicsView로 좌우 분리된 화면 구성)
-        self.view = UnifiedGraphicsView(self.scene, self)
-        self.setCentralWidget(self.view)
+# 개별 탭 클래스 정의
+class FileNodeTap(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout()
+        label = QLabel("File Node Tap")
+        layout.addWidget(label)
 
-        # 왼쪽 1/4 부분을 사각형 선으로 분리하여 노드 선택 패널과 작업 공간을 구분
-        self.left_boundary = QGraphicsRectItem(50, 50, 400, 1100)
-        self.left_boundary.setPen(QPen(Qt.black, 2))  # 사각형 선 표시
-        self.scene.addItem(self.left_boundary)
+        self.scene = QGraphicsScene(layout)
+
+        self.setLayout(layout)
 
         self.fposition = [
             ["업로드", 60, 70], ["Node 2", 160, 70], ["Node 3", 260, 70], ["Node 4", 360, 70],
-            ["Node 5", 60, 190], ["Node 6", 160, 190], ["Node 7", 260, 190], ["Node 8", 360, 190],
-            ["Node 9", 60, 310], ["Node 10", 160, 310], ["Node 11", 260, 310], ["Node 12", 360, 310],
-            ["Node 13", 60, 430], ["Node 14", 160, 430], ["Node 15", 260, 430], ["Node 16", 360, 430],
-            ["Node 17", 60, 550], ["Node 18", 160, 550], ["Node 19", 260, 550], ["Node 20", 360, 550]
+            ["Node 5", 60, 190], ["Node 6", 160, 190], ["Node 7", 260, 190], ["Node 8", 360, 190]
         ]
 
         # 노드 선택 패널에 노드 추가 (아이콘 및 이름 형태로 구성)
         for node_info in self.fposition:
             self.addNodeToPanel(node_info[0], QPointF(node_info[1], node_info[2]))
 
-        # 작업 공간에 Start 노드 생성
-        self.createStartNode()
-
-        # 오른쪽 작업 공간 테두리 추가
-        self.right_boundary = QGraphicsRectItem(450, 50, 1500, 1100)
-        self.right_boundary.setPen(QPen(Qt.black, 2))  # 사각형 선 표시
-        self.scene.addItem(self.right_boundary)
-
-        # 노드 설명 영역 추가
-        self.description_box = QGraphicsRectItem(50, 650, 400, 500)
-        self.description_box.setPen(QPen(Qt.black, 2))
-        self.scene.addItem(self.description_box)
-        description_label = QGraphicsTextItem("Node Description", self.description_box)
-        description_label.setPos(150, 900)
-
     def addNodeToPanel(self, text, position):
         # 패널에 노드 추가
         node = DraggableNode(0, 0, 80, 80, text)
         node.setPos(position)
         self.scene.addItem(node)
-
-    def createStartNode(self):
-        # 작업 공간에 Start 노드 생성
-        node = DraggableNode(0, 0, 80, 80, "Start")
-        node.setBrush(QBrush(QColor("lightgreen")))
-        center_x = 1200 - 30  # 오른쪽 3/4 부분 중앙에 위치
-        center_y = (self.scene.height() / 2) - 30
-        node.setPos(center_x, center_y)
-        self.scene.addItem(node)
-        self.previous_node = node
-
 
 class DraggableNode(QGraphicsRectItem):
     def __init__(self, x, y, width, height, label_text):
@@ -176,34 +160,34 @@ class DraggableNode(QGraphicsRectItem):
             self.temp_line = None
         super().mouseReleaseEvent(event)
 
+class VisualizationNodeTap(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout()
+        label = QLabel("Visualization Node Tap")
+        layout.addWidget(label)
+        self.setLayout(layout)
 
-class UnifiedGraphicsView(QGraphicsView):
-    def __init__(self, scene, parent=None):
-        super().__init__(scene, parent)
-        self.setAcceptDrops(True)
+class TransfromNodeTap(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout()
+        label = QLabel("Transform Node Tap")
+        layout.addWidget(label)
+        self.setLayout(layout)
 
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasText():
-            event.acceptProposedAction()
+class ModelNodeTap(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout()
+        label = QLabel("Model Node Tap")
+        layout.addWidget(label)
+        self.setLayout(layout)
 
-    def dropEvent(self, event):
-        # 드롭된 위치에 노드 생성
-        text = event.mimeData().text()
-        position = self.mapToScene(event.pos())
-        node = DraggableNode(0, 0, 80, 80, text)
-        node.setBrush(QColor("lightblue"))
-        node.setFlag(QGraphicsItem.ItemIsMovable, True)  # 드롭된 노드는 이동 가능
-        node.setPos(position)
-
-        if not self.sceneRect().contains(node.sceneBoundingRect()):
-            return
-
-        self.scene().addItem(node)
-        event.acceptProposedAction()
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = EasyMLWindow()
-    window.show()
-    sys.exit(app.exec_())
+class EvaluateNodeTap(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout()
+        label = QLabel("Evaluate Node Tap")
+        layout.addWidget(label)
+        self.setLayout(layout)
