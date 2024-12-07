@@ -9,21 +9,28 @@ class DraggableButton(QtWidgets.QPushButton):
         self.left_dot = None
         self.right_dot = None
         self.in_workspace = False
-        self.create_dots()  # Create dots immediately
-        self.update_dots_visibility()  # Update visibility based on workspace status
+        self.create_dots()
+        self.update_dots_visibility()
 
     def create_dots(self):
-        # Create left dot (red)
-        self.left_dot = QtWidgets.QLabel(self.parent())
+        if self.left_dot:
+            self.left_dot.deleteLater()
+        if self.right_dot:
+            self.right_dot.deleteLater()
+
+        # Create left dot (red) - only accepts drops
+        self.left_dot = ConnectionDot(self.parent(), is_source=False)
         self.left_dot.setStyleSheet("background-color: red; border-radius: 5px;")
         self.left_dot.setFixedSize(10, 10)
         self.left_dot.hide()
+        self.left_dot.button = self  # Reference to parent button
 
-        # Create right dot (blue)
-        self.right_dot = QtWidgets.QLabel(self.parent())
+        # Create right dot (blue) - only allows drag
+        self.right_dot = ConnectionDot(self.parent(), is_source=True)
         self.right_dot.setStyleSheet("background-color: blue; border-radius: 5px;")
         self.right_dot.setFixedSize(10, 10)
         self.right_dot.hide()
+        self.right_dot.button = self  # Reference to parent button
 
     def update_dots_visibility(self):
         if self.in_workspace and self.parent():
@@ -32,7 +39,7 @@ class DraggableButton(QtWidgets.QPushButton):
                 button_pos = self.pos()
                 self.left_dot.move(button_pos.x() - 15, button_pos.y() + self.height() // 2 - 5)
                 self.right_dot.move(button_pos.x() + self.width() + 5, button_pos.y() + self.height() // 2 - 5)
-                self.left_dot.raise_()  # Ensure dots are visible on top
+                self.left_dot.raise_()
                 self.right_dot.raise_()
                 self.left_dot.show()
                 self.right_dot.show()
@@ -50,6 +57,12 @@ class DraggableButton(QtWidgets.QPushButton):
 
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton:
+            # Hide dots before starting drag
+            if self.left_dot:
+                self.left_dot.hide()
+            if self.right_dot:
+                self.right_dot.hide()
+            
             drag = QtGui.QDrag(self)
             mime_data = QtCore.QMimeData()
             mime_data.setText(self.text())
@@ -82,6 +95,99 @@ class DraggableButton(QtWidgets.QPushButton):
         super().moveEvent(event)
         self.update_dots_visibility()  # Update dots position when button moves
 
+    def closeEvent(self, event):
+        # Clean up dots when the button is closed
+        if self.left_dot:
+            self.left_dot.deleteLater()
+        if self.right_dot:
+            self.right_dot.deleteLater()
+        super().closeEvent(event)
+
+
+class ConnectionDot(QtWidgets.QLabel):
+    def __init__(self, parent=None, is_source=True):
+        super().__init__(parent)
+        self.is_source = is_source  # True for blue (source), False for red (target)
+        self.setAcceptDrops(not is_source)  # Only red dots accept drops
+        self.button = None  # Reference to parent button
+        self.connection_line = None
+
+    def mousePressEvent(self, event):
+        if self.is_source and event.button() == QtCore.Qt.LeftButton:
+            # Only blue dots can initiate drag
+            drag = QtGui.QDrag(self)
+            mime_data = QtCore.QMimeData()
+            mime_data.setText('connection')
+            drag.setMimeData(mime_data)
+            
+            # Create a pixmap for the drag visual
+            pixmap = QtGui.QPixmap(self.size())
+            pixmap.fill(QtGui.QColor(0, 0, 255, 100))
+            drag.setPixmap(pixmap)
+            
+            # Start position for the connection line
+            self.start_pos = self.mapToParent(self.rect().center())
+            
+            # Execute drag
+            drag.exec_(QtCore.Qt.MoveAction)
+
+    def dragEnterEvent(self, event):
+        if not self.is_source and event.mimeData().hasText():
+            if event.mimeData().text() == 'connection':
+                event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        if not self.is_source and event.mimeData().hasText():
+            if event.mimeData().text() == 'connection':
+                source_dot = event.source()
+                if source_dot and isinstance(source_dot, ConnectionDot):
+                    # Create the connection line
+                    self.create_connection(source_dot, self)
+                event.acceptProposedAction()
+
+    def create_connection(self, source_dot, target_dot):
+        # Get the workspace widget
+        workspace = self.parent()
+        if workspace:
+            # Create a new connection line
+            connection = ConnectionLine(
+                workspace,
+                source_dot.mapToParent(source_dot.rect().center()),
+                target_dot.mapToParent(target_dot.rect().center())
+            )
+            connection.source_dot = source_dot
+            connection.target_dot = target_dot
+            connection.show()
+            
+            # Store the connection in the workspace
+            if hasattr(workspace, 'connections'):
+                workspace.connections.append(connection)
+            else:
+                workspace.connections = [connection]
+
+
+class ConnectionLine(QtWidgets.QWidget):
+    def __init__(self, parent, start_pos, end_pos):
+        super().__init__(parent)
+        self.start_pos = start_pos
+        self.end_pos = end_pos
+        self.source_dot = None
+        self.target_dot = None
+        self.setGeometry(0, 0, parent.width(), parent.height())
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+
+    def paintEvent(self, event):
+        if self.source_dot and self.target_dot:
+            painter = QtGui.QPainter(self)
+            painter.setRenderHint(QtGui.QPainter.Antialiasing)
+            painter.setPen(QtGui.QPen(QtCore.Qt.black, 2))
+            
+            # Update positions in case dots have moved
+            start_pos = self.source_dot.mapToParent(self.source_dot.rect().center())
+            end_pos = self.target_dot.mapToParent(self.target_dot.rect().center())
+            
+            painter.drawLine(start_pos, end_pos)
+
 
 class DropWorkspace(QtWidgets.QWidget):
     def __init__(self):
@@ -89,6 +195,7 @@ class DropWorkspace(QtWidgets.QWidget):
         self.setAcceptDrops(True)
         self.setStyleSheet("background-color: white; border: 1px solid black;")
         self.nodes = []
+        self.connections = []  # Store connection lines
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
