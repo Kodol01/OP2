@@ -20,15 +20,15 @@ class DraggableButton(QtWidgets.QPushButton):
 
         # Create left dot (red) - only accepts drops
         self.left_dot = ConnectionDot(self.parent(), is_source=False)
-        self.left_dot.setStyleSheet("background-color: red; border-radius: 5px;")
-        self.left_dot.setFixedSize(10, 10)
+        self.left_dot.setStyleSheet("background-color: red; border-radius: 10px;")
+        self.left_dot.setFixedSize(20, 20)
         self.left_dot.hide()
         self.left_dot.button = self  # Reference to parent button
 
         # Create right dot (blue) - only allows drag
         self.right_dot = ConnectionDot(self.parent(), is_source=True)
-        self.right_dot.setStyleSheet("background-color: blue; border-radius: 5px;")
-        self.right_dot.setFixedSize(10, 10)
+        self.right_dot.setStyleSheet("background-color: blue; border-radius: 10px;")
+        self.right_dot.setFixedSize(20, 20)
         self.right_dot.hide()
         self.right_dot.button = self  # Reference to parent button
 
@@ -37,8 +37,8 @@ class DraggableButton(QtWidgets.QPushButton):
             if self.left_dot and self.right_dot:
                 # Update positions relative to the button's position in the workspace
                 button_pos = self.pos()
-                self.left_dot.move(button_pos.x() - 15, button_pos.y() + self.height() // 2 - 5)
-                self.right_dot.move(button_pos.x() + self.width() + 5, button_pos.y() + self.height() // 2 - 5)
+                self.left_dot.move(button_pos.x() - 15, button_pos.y() + self.height() // 2 - 10)
+                self.right_dot.move(button_pos.x() + self.width() - 5, button_pos.y() + self.height() // 2 - 10)
                 self.left_dot.raise_()
                 self.right_dot.raise_()
                 self.left_dot.show()
@@ -52,34 +52,61 @@ class DraggableButton(QtWidgets.QPushButton):
         super().resizeEvent(event)
         # Adjust dot positions when the button is resized
         if self.left_dot and self.right_dot:
-            self.left_dot.move(-15, self.height() // 2 - 5)
-            self.right_dot.move(self.width() + 5, self.height() // 2 - 5)
+            self.left_dot.move(-15, self.height() // 2 - 10)
+            self.right_dot.move(self.width() - 5, self.height() // 2 - 10)
 
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton:
-            # Hide dots before starting drag
-            if self.left_dot:
-                self.left_dot.hide()
-            if self.right_dot:
-                self.right_dot.hide()
+            # 노드가 workspace 안에 있는 경우
+            if self.in_workspace:
+                # 드래그 시작 위치 저장
+                self.drag_start_position = event.pos()
+                
+            # 노드가 workspace 밖에 있는 경우 (기존 동작 유지)
+            else:
+                # Hide dots before starting drag
+                if self.left_dot:
+                    self.left_dot.hide()
+                if self.right_dot:
+                    self.right_dot.hide()
+                
+                drag = QtGui.QDrag(self)
+                mime_data = QtCore.QMimeData()
+                mime_data.setText(self.text())
+                drag.setMimeData(mime_data)
+                drag.setPixmap(self.grab())
+                drag.setHotSpot(event.pos())
+                transparent_pixmap = self.grab()
+                transparent_pixmap.fill(QtGui.QColor(255, 255, 255, 128))
+                drag.setPixmap(transparent_pixmap)
+                drop_action = drag.exec_(QtCore.Qt.CopyAction | QtCore.Qt.MoveAction)
+                
+                if drop_action == QtCore.Qt.MoveAction:
+                    self.close()
+                # Call reset_tab_nodes after dragging a node
+                main_window = self.window()
+                if isinstance(main_window, EasyMLApp):
+                    main_window.reset_tab_nodes()
+
+    def mouseMoveEvent(self, event):
+        if not self.in_workspace:
+            return
+        
+        if hasattr(self, 'drag_start_position'):
+            if (event.pos() - self.drag_start_position).manhattanLength() < QtWidgets.QApplication.startDragDistance():
+                return
+
+            # 현재 위치로 버튼 이동
+            new_pos = self.mapToParent(event.pos() - self.drag_start_position)
+            self.move(new_pos)
             
-            drag = QtGui.QDrag(self)
-            mime_data = QtCore.QMimeData()
-            mime_data.setText(self.text())
-            drag.setMimeData(mime_data)
-            drag.setPixmap(self.grab())
-            drag.setHotSpot(event.pos())
-            transparent_pixmap = self.grab()
-            transparent_pixmap.fill(QtGui.QColor(255, 255, 255, 128))
-            drag.setPixmap(transparent_pixmap)
-            drop_action = drag.exec_(QtCore.Qt.CopyAction | QtCore.Qt.MoveAction)
-            
-            if drop_action == QtCore.Qt.MoveAction:
-                self.close()
-            # Call reset_tab_nodes after dragging a node
-            main_window = self.window()
-            if isinstance(main_window, EasyMLApp):
-                main_window.reset_tab_nodes()
+            # 연결된 선 업데이트
+            workspace = self.parent()
+            if workspace and hasattr(workspace, 'connections'):
+                for connection in workspace.connections:
+                    if (connection.source_dot and connection.source_dot.button == self) or \
+                       (connection.target_dot and connection.target_dot.button == self):
+                        connection.update()
 
     def enterEvent(self, event):
         main_window = self.window()
@@ -107,29 +134,57 @@ class DraggableButton(QtWidgets.QPushButton):
 class ConnectionDot(QtWidgets.QLabel):
     def __init__(self, parent=None, is_source=True):
         super().__init__(parent)
-        self.is_source = is_source  # True for blue (source), False for red (target)
-        self.setAcceptDrops(not is_source)  # Only red dots accept drops
-        self.button = None  # Reference to parent button
+        self.is_source = is_source
+        self.setAcceptDrops(not is_source)
+        self.button = None
         self.connection_line = None
+        self.temp_connection = None
+        self.dragging = False  # 드래그 상태 추적을 위한 변수 추가
 
     def mousePressEvent(self, event):
         if self.is_source and event.button() == QtCore.Qt.LeftButton:
-            # Only blue dots can initiate drag
+            self.dragging = True
             drag = QtGui.QDrag(self)
             mime_data = QtCore.QMimeData()
             mime_data.setText('connection')
             drag.setMimeData(mime_data)
             
-            # Create a pixmap for the drag visual
-            pixmap = QtGui.QPixmap(self.size())
-            pixmap.fill(QtGui.QColor(0, 0, 255, 100))
-            drag.setPixmap(pixmap)
+            # 임시 연결선 생성
+            workspace = self.parent()
+            self.temp_connection = ConnectionLine(workspace, 
+                                               self.mapToParent(self.rect().center()),
+                                               self.mapToParent(self.rect().center()))
+            self.temp_connection.raise_()  # 선을 최상위로 올림
+            self.temp_connection.show()
             
-            # Start position for the connection line
-            self.start_pos = self.mapToParent(self.rect().center())
+            # 전역 마우스 이벤트 추적 시작
+            QtWidgets.QApplication.instance().installEventFilter(self)
             
-            # Execute drag
-            drag.exec_(QtCore.Qt.MoveAction)
+            # 드래그 실행
+            result = drag.exec_(QtCore.Qt.MoveAction)
+            
+            # 드래그 종료 후 정리
+            self.dragging = False
+            if self.temp_connection:
+                self.temp_connection.deleteLater()
+                self.temp_connection = None
+            QtWidgets.QApplication.instance().removeEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if self.dragging and event.type() == QtCore.QEvent.MouseMove:
+            if self.temp_connection:
+                # 현재 마우스 위치를 workspace 좌표계로 변환
+                workspace = self.parent()
+                cursor_pos = workspace.mapFromGlobal(event.globalPos())
+                # 시작점은 dot의 중심으로 고정
+                start_pos = self.mapToParent(self.rect().center())
+                
+                # 연���선 업데이트
+                self.temp_connection.start_pos = start_pos
+                self.temp_connection.end_pos = cursor_pos
+                self.temp_connection.update()
+                return True
+        return False
 
     def dragEnterEvent(self, event):
         if not self.is_source and event.mimeData().hasText():
@@ -173,20 +228,42 @@ class ConnectionLine(QtWidgets.QWidget):
         self.end_pos = end_pos
         self.source_dot = None
         self.target_dot = None
+        # 전체 workspace 영역을 커버하도록 설정
         self.setGeometry(0, 0, parent.width(), parent.height())
         self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
 
     def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setPen(QtGui.QPen(QtCore.Qt.black, 2))
+        
+        # 일반 연결선인 경우
         if self.source_dot and self.target_dot:
-            painter = QtGui.QPainter(self)
-            painter.setRenderHint(QtGui.QPainter.Antialiasing)
-            painter.setPen(QtGui.QPen(QtCore.Qt.black, 2))
-            
-            # Update positions in case dots have moved
             start_pos = self.source_dot.mapToParent(self.source_dot.rect().center())
             end_pos = self.target_dot.mapToParent(self.target_dot.rect().center())
-            
-            painter.drawLine(start_pos, end_pos)
+        # 임시 연결선인 경우
+        else:
+            start_pos = self.start_pos
+            end_pos = self.end_pos
+        
+        # Create path for cubic bezier curve
+        path = QtGui.QPainterPath()
+        path.moveTo(start_pos)
+        
+        # Calculate control points for the curve
+        control1_x = start_pos.x() + (end_pos.x() - start_pos.x()) * 0.4
+        control2_x = start_pos.x() + (end_pos.x() - start_pos.x()) * 0.6
+        
+        control1 = QtCore.QPointF(control1_x, start_pos.y())
+        control2 = QtCore.QPointF(control2_x, end_pos.y())
+        
+        # Draw cubic bezier curve
+        path.cubicTo(control1, control2, end_pos)
+        painter.drawPath(path)
+
+    def update(self):
+        # 전체 위젯을 업데이트하고 다시 그리기
+        super().update()
 
 
 class DropWorkspace(QtWidgets.QWidget):
